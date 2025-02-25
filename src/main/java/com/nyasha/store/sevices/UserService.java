@@ -96,6 +96,7 @@ public class UserService {
             throw new RuntimeException("Search failed: " + e.getMessage());
         }
     }
+    //best practices
 }
 
 
