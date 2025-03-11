@@ -2,7 +2,7 @@ package com.nyasha.store.controllers;
 
 
 import com.nyasha.store.entities.Address;
-import com.nyasha.store.sevices.AddressService;
+import com.nyasha.store.services.AddressService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;

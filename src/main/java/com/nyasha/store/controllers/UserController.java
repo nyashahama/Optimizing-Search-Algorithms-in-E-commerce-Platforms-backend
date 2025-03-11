@@ -1,10 +1,11 @@
 package com.nyasha.store.controllers;
 
 import com.nyasha.store.entities.User;
-import com.nyasha.store.sevices.UserService;
+import com.nyasha.store.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -15,13 +16,13 @@ public class UserController {
     @Autowired
     private UserService userService;
 
-    // Create a user
+    // Create a user.
     @PostMapping
     public User createUser(@RequestBody User user) {
         return userService.createUser(user);
     }
 
-    // Read a user by ID
+    // Read a user by ID.
     @GetMapping("/{id}")
     public ResponseEntity<User> getUserById(@PathVariable Long id) {
         return userService.getUserById(id)
@@ -29,31 +30,32 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // Get all users or search by a term.
     @GetMapping
     public List<User> getAllUsers(@RequestParam(required = false) String search) {
         if (search != null && !search.isEmpty()) {
-            return userService.searchUsers(search); // Now uses BST
+            return userService.searchUsers(search);
         } else {
             return userService.getAllUsers();
         }
     }
 
+    // Alternative search endpoint.
     @GetMapping("/search")
     public List<User> searchUsers(@RequestParam String query) {
         return userService.searchUsers(query);
     }
 
-    // Update a user
+    // Update a user.
     @PutMapping("/{id}")
     public User updateUser(@PathVariable Long id, @RequestBody User userDetails) {
         return userService.updateUser(id, userDetails);
     }
 
-    // Delete a user
+    // Delete a user.
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
     }
-    //best practice
 }

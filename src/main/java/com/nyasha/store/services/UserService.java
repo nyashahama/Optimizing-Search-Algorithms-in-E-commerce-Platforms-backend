@@ -1,9 +1,11 @@
-package com.nyasha.store.sevices;
+package com.nyasha.store.services;
 
 import com.nyasha.store.entities.User;
 import com.nyasha.store.repositories.UserRepository;
 import com.nyasha.store.utils.UserIndex;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -14,13 +16,15 @@ import java.util.Optional;
 @Service
 public class UserService {
 
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
+
     @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    // Use the combined index.
+    // Combined in-memory index.
     private final UserIndex userIndex = new UserIndex();
 
     @PostConstruct
@@ -29,6 +33,7 @@ public class UserService {
         for (User user : users) {
             userIndex.insert(user);
         }
+        logger.info("User index initialized with {} users", users.size());
     }
 
     // Create a new user, save to repository, and update the index.
@@ -36,16 +41,15 @@ public class UserService {
         user.setHashedPassword(passwordEncoder.encode(user.getHashedPassword()));
         User savedUser = userRepository.save(user);
         userIndex.insert(savedUser);
+        logger.info("Created user with id {}", savedUser.getUserId());
         return savedUser;
     }
 
     // Update an existing user.
-    // Capture the old name/email values before updating, then update the index.
+    // Capture old name/email values before updating, then update the index.
     public User updateUser(Long id, User userDetails) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // Capture old keys before updating.
         String oldName = user.getName();
         String oldEmail = user.getEmail();
 
@@ -57,8 +61,9 @@ public class UserService {
         }
         User updatedUser = userRepository.save(user);
 
-        // Update the index using the old keys.
+        // Update the in-memory index.
         userIndex.update(oldName, oldEmail, updatedUser);
+        logger.info("Updated user with id {}", updatedUser.getUserId());
         return updatedUser;
     }
 
@@ -75,29 +80,31 @@ public class UserService {
     // Delete a user.
     public void deleteUser(Long id) {
         Optional<User> optionalUser = userRepository.findById(id);
-        if(optionalUser.isPresent()){
+        if (optionalUser.isPresent()) {
             User user = optionalUser.get();
             // Remove from index first.
             userIndex.remove(user);
             userRepository.deleteById(id);
+            logger.info("Deleted user with id {}", id);
+        } else {
+            logger.warn("Attempted to delete non-existing user with id {}", id);
         }
     }
 
     // Search users using the combined index.
     public List<User> searchUsers(String searchTerm) {
         try {
-            System.out.println("Searching for: " + searchTerm);
+            logger.info("Searching for users with search term: {}", searchTerm);
             List<User> results = userIndex.search(searchTerm);
-            System.out.println("Found results: " + results.size());
+            logger.info("Found {} users matching search term '{}'", results.size(), searchTerm);
             return results;
         } catch (Exception e) {
-            System.err.println("Search error: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Search error for term '{}': {}", searchTerm, e.getMessage(), e);
             throw new RuntimeException("Search failed: " + e.getMessage());
         }
     }
-    //best practices
 }
+
 
 
 

@@ -1,4 +1,4 @@
-package com.nyasha.store.sevices;
+package com.nyasha.store.services;
 
 
 import com.nyasha.store.entities.Address;
