@@ -45,6 +45,25 @@ public class UserService {
         return savedUser;
     }
 
+    /**
+     * Authenticate user by email and password.
+     * @param email the user email.
+     * @param password the plain text password.
+     * @return the authenticated user, if credentials are valid.
+     */
+    public Optional<User> authenticateUser(String email, String password) {
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (optionalUser.isPresent()) {
+            User user = optionalUser.get();
+            if (passwordEncoder.matches(password, user.getHashedPassword())) {
+                logger.info("User authenticated with id {}", user.getUserId());
+                return Optional.of(user);
+            }
+        }
+        logger.warn("Authentication failed for email: {}", email);
+        return Optional.empty();
+    }
+
     // Update an existing user.
     // Capture old name/email values before updating, then update the index.
     public User updateUser(Long id, User userDetails) {
