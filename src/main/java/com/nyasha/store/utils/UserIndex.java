@@ -3,12 +3,14 @@ package com.nyasha.store.utils;
 import com.nyasha.store.entities.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+@Component
 public class UserIndex {
 
     private static final Logger logger = LoggerFactory.getLogger(UserIndex.class);
@@ -25,6 +27,10 @@ public class UserIndex {
     /**
      * Helper method to get or create a synchronized list from the given map.
      */
+
+    // A common lock to ensure atomic index updates. Adjust granularity as needed.
+    private final Object indexLock = new Object();
+
     private List<User> getOrCreateList(ConcurrentMap<String, List<User>> map, String key) {
         return map.computeIfAbsent(key, k -> Collections.synchronizedList(new ArrayList<>()));
     }
@@ -35,13 +41,17 @@ public class UserIndex {
     public void insert(User user) {
         String nameKey = user.getName().toLowerCase();
         String emailKey = user.getEmail().toLowerCase();
-
-        getOrCreateList(fastIndexByName, nameKey).add(user);
-        getOrCreateList(fastIndexByEmail, emailKey).add(user);
-        getOrCreateList(sortedIndexByName, nameKey).add(user);
-        getOrCreateList(sortedIndexByEmail, emailKey).add(user);
-
-        logger.debug("Inserted user {} into indexes", user.getUserId());
+        try {
+            synchronized (indexLock) {
+                getOrCreateList(fastIndexByName, nameKey).add(user);
+                getOrCreateList(fastIndexByEmail, emailKey).add(user);
+                getOrCreateList(sortedIndexByName, nameKey).add(user);
+                getOrCreateList(sortedIndexByEmail, emailKey).add(user);
+            }
+            logger.debug("Inserted user {} into indexes", user.getUserId());
+        }catch (Exception e){
+            logger.error("Error inserting user {} into indexes: {}", user.getUserId(), e.getMessage(), e);
+        }
     }
 
     /**
@@ -50,13 +60,17 @@ public class UserIndex {
     public void remove(User user) {
         String nameKey = user.getName().toLowerCase();
         String emailKey = user.getEmail().toLowerCase();
-
-        removeFromIndex(fastIndexByName, nameKey, user);
-        removeFromIndex(fastIndexByEmail, emailKey, user);
-        removeFromIndex(sortedIndexByName, nameKey, user);
-        removeFromIndex(sortedIndexByEmail, emailKey, user);
-
-        logger.debug("Removed user {} from indexes", user.getUserId());
+        try {
+            synchronized (indexLock) {
+                removeFromIndex(fastIndexByName, nameKey, user);
+                removeFromIndex(fastIndexByEmail, emailKey, user);
+                removeFromIndex(sortedIndexByName, nameKey, user);
+                removeFromIndex(sortedIndexByEmail, emailKey, user);
+            }
+            logger.debug("Removed user {} from indexes", user.getUserId());
+        }catch  (Exception e){
+            logger.error("Error removing user {} from indexes: {}",user.getUserId(),e.getMessage(),e);
+        }
     }
 
     /**
@@ -70,17 +84,21 @@ public class UserIndex {
     public void update(String oldName, String oldEmail, User updatedUser) {
         String oldNameKey = oldName.toLowerCase();
         String oldEmailKey = oldEmail.toLowerCase();
+        try {
+            // Remove using the old keys.
+            synchronized (indexLock) {
+                removeFromIndex(fastIndexByName, oldNameKey, updatedUser);
+                removeFromIndex(fastIndexByEmail, oldEmailKey, updatedUser);
+                removeFromIndex(sortedIndexByName, oldNameKey, updatedUser);
+                removeFromIndex(sortedIndexByEmail, oldEmailKey, updatedUser);
 
-        // Remove using the old keys.
-        removeFromIndex(fastIndexByName, oldNameKey, updatedUser);
-        removeFromIndex(fastIndexByEmail, oldEmailKey, updatedUser);
-        removeFromIndex(sortedIndexByName, oldNameKey, updatedUser);
-        removeFromIndex(sortedIndexByEmail, oldEmailKey, updatedUser);
-
-        // Insert the updated user with the new keys.
-        insert(updatedUser);
-
-        logger.debug("Updated user {} in indexes", updatedUser.getUserId());
+                // Insert the updated user with the new keys.
+                insert(updatedUser);
+            }
+            logger.debug("Updated user {} in indexes", updatedUser.getUserId());
+        }catch (Exception e){
+            logger.error("Error updating user {} in indexes: {}", updatedUser.getUserId(), e.getMessage(), e);
+        }
     }
 
     /**
@@ -90,11 +108,15 @@ public class UserIndex {
     public List<User> search(String searchTerm) {
         String prefix = searchTerm.toLowerCase();
         Set<User> results = new HashSet<>();
-
-        results.addAll(searchByPrefix(sortedIndexByName, prefix));
-        results.addAll(searchByPrefix(sortedIndexByEmail, prefix));
-
-        logger.debug("Search for prefix '{}' returned {} results", prefix, results.size());
+        try {
+            synchronized (indexLock) {
+                results.addAll(searchByPrefix(sortedIndexByName, prefix));
+                results.addAll(searchByPrefix(sortedIndexByEmail, prefix));
+            }
+            logger.debug("Search for prefix '{}' returned {} results", prefix, results.size());
+        }catch (Exception e){
+            logger.error("Search error for prefix '{}': {}", prefix, e.getMessage(), e);
+        }
         return new ArrayList<>(results);
     }
 

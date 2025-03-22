@@ -25,24 +25,39 @@ public class UserService {
     private PasswordEncoder passwordEncoder;
 
     // Combined in-memory index.
-    private final UserIndex userIndex = new UserIndex();
+    private final UserIndex userIndex;
+
+    @Autowired
+    public UserService(UserIndex userIndex){
+        this.userIndex = userIndex;
+    }
 
     @PostConstruct
     public void initializeIndex() {
-        List<User> users = userRepository.findAll();
-        for (User user : users) {
-            userIndex.insert(user);
+        try {
+            List<User> users = userRepository.findAll();
+            for (User user : users) {
+                userIndex.insert(user);
+            }
+            logger.info("User index initialized with {} users", users.size());
+        }catch (Exception e){
+            logger.error("Error initializing user index: {}", e.getMessage(),e);
+            throw new RuntimeException("User initialization failed: "+e.getMessage());
         }
-        logger.info("User index initialized with {} users", users.size());
     }
 
     // Create a new user, save to repository, and update the index.
     public User createUser(User user) {
-        user.setHashedPassword(passwordEncoder.encode(user.getHashedPassword()));
-        User savedUser = userRepository.save(user);
-        userIndex.insert(savedUser);
-        logger.info("Created user with id {}", savedUser.getUserId());
-        return savedUser;
+        try {
+            user.setHashedPassword(passwordEncoder.encode(user.getHashedPassword()));
+            User savedUser = userRepository.save(user);
+            userIndex.insert(savedUser);
+            logger.info("Created user with id {}", savedUser.getUserId());
+            return savedUser;
+        }catch (Exception e){
+            logger.error("Error creating user: {}", e.getMessage(), e);
+            throw new RuntimeException("User creation failed: " + e.getMessage());
+        }
     }
 
     /**
@@ -52,38 +67,48 @@ public class UserService {
      * @return the authenticated user, if credentials are valid.
      */
     public Optional<User> authenticateUser(String email, String password) {
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
-            if (passwordEncoder.matches(password, user.getHashedPassword())) {
-                logger.info("User authenticated with id {}", user.getUserId());
-                return Optional.of(user);
+        try {
+            Optional<User> optionalUser = userRepository.findByEmail(email);
+            if (optionalUser.isPresent()) {
+                User user = optionalUser.get();
+                if (passwordEncoder.matches(password, user.getHashedPassword())) {
+                    logger.info("User authenticated with id {}", user.getUserId());
+                    return Optional.of(user);
+                }
             }
+            logger.warn("Authentication failed for email: {}", email);
+            return Optional.empty();
+        } catch (Exception e) {
+            logger.error("Error during authentication for email {}: {}",email, e.getMessage(),e);
+            return Optional.empty();
         }
-        logger.warn("Authentication failed for email: {}", email);
-        return Optional.empty();
     }
 
     // Update an existing user.
     // Capture old name/email values before updating, then update the index.
     public User updateUser(Long id, User userDetails) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        String oldName = user.getName();
-        String oldEmail = user.getEmail();
+        try {
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            String oldName = user.getName();
+            String oldEmail = user.getEmail();
 
-        // Update user details.
-        user.setName(userDetails.getName());
-        user.setEmail(userDetails.getEmail());
-        if (userDetails.getHashedPassword() != null && !userDetails.getHashedPassword().isEmpty()) {
-            user.setHashedPassword(passwordEncoder.encode(userDetails.getHashedPassword()));
+            // Update user details.
+            user.setName(userDetails.getName());
+            user.setEmail(userDetails.getEmail());
+            if (userDetails.getHashedPassword() != null && !userDetails.getHashedPassword().isEmpty()) {
+                user.setHashedPassword(passwordEncoder.encode(userDetails.getHashedPassword()));
+            }
+            User updatedUser = userRepository.save(user);
+
+            // Update the in-memory index.
+            userIndex.update(oldName, oldEmail, updatedUser);
+            logger.info("Updated user with id {}", updatedUser.getUserId());
+            return updatedUser;
+        } catch (RuntimeException e) {
+            logger.error("Error updating user with id {}: {}", id, e.getMessage(), e);
+            throw new RuntimeException("User update failed: " + e.getMessage());
         }
-        User updatedUser = userRepository.save(user);
-
-        // Update the in-memory index.
-        userIndex.update(oldName, oldEmail, updatedUser);
-        logger.info("Updated user with id {}", updatedUser.getUserId());
-        return updatedUser;
     }
 
     // Read a user by ID.
@@ -98,15 +123,20 @@ public class UserService {
 
     // Delete a user.
     public void deleteUser(Long id) {
-        Optional<User> optionalUser = userRepository.findById(id);
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
-            // Remove from index first.
-            userIndex.remove(user);
-            userRepository.deleteById(id);
-            logger.info("Deleted user with id {}", id);
-        } else {
-            logger.warn("Attempted to delete non-existing user with id {}", id);
+        try {
+            Optional<User> optionalUser = userRepository.findById(id);
+            if (optionalUser.isPresent()) {
+                User user = optionalUser.get();
+                // Remove from index first.
+                userIndex.remove(user);
+                userRepository.deleteById(id);
+                logger.info("Deleted user with id {}", id);
+            } else {
+                logger.warn("Attempted to delete non-existing user with id {}", id);
+            }
+        } catch (Exception e) {
+            logger.error("Error deleting user with id {}: {}", id, e.getMessage(), e);
+            throw new RuntimeException("Deleting user failed: "+e.getMessage());
         }
     }
 

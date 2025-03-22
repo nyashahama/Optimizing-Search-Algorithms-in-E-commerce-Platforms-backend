@@ -52,7 +52,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/users/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
-                .httpBasic(httpBasic -> httpBasic.disable());  // Disable Basic Auth
+                .httpBasic(withDefaults());  // Disable Basic Auth
 
         return http.build();
     }
